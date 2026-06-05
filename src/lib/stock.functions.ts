@@ -109,21 +109,21 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-async function fetchFromYahoo(symbol: string): Promise<StockData | null> {
+async function fetchFromYahoo(symbol: string): Promise<ProviderAttempt> {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       symbol,
     )}?range=1y&interval=1d`;
     const res = await fetch(url, { headers: BROWSER_HEADERS });
-    if (!res.ok) return null;
+    if (!res.ok) return failedAttempt("Yahoo Finance", `Yahoo Finance returned ${res.status}.`);
     const json: any = await res.json();
-    if (json?.chart?.error) return null;
+    if (json?.chart?.error) return failedAttempt("Yahoo Finance", json.chart.error.description || "Yahoo Finance rejected the ticker.");
     const result = json?.chart?.result?.[0];
-    if (!result) return null;
+    if (!result) return failedAttempt("Yahoo Finance", "Yahoo Finance returned no chart result.");
     const meta = result.meta;
     const timestamps: number[] = result.timestamp || [];
     const closes: (number | null)[] = result.indicators?.quote?.[0]?.close || [];
-    if (!meta?.regularMarketPrice) return null;
+    if (!meta?.regularMarketPrice) return failedAttempt("Yahoo Finance", "Yahoo Finance returned no current price.");
 
     const fullHistory = timestamps
       .map((t, i) => ({ t: t * 1000, c: closes[i] as number }))
@@ -137,26 +137,33 @@ async function fetchFromYahoo(symbol: string): Promise<StockData | null> {
 
     return {
       provider: "Yahoo Finance",
-      symbol,
-      name: meta.longName || meta.shortName || symbol,
-      exchange: meta.fullExchangeName || meta.exchangeName || "",
-      currency: meta.currency || "USD",
-      price,
-      previousClose: prev,
-      change: price - prev,
-      changePercent: prev ? ((price - prev) / prev) * 100 : 0,
-      open: meta.regularMarketOpen ?? price,
-      dayHigh: meta.regularMarketDayHigh ?? price,
-      dayLow: meta.regularMarketDayLow ?? price,
-      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? price,
-      fiftyTwoWeekLow: meta.fiftyTwoWeekLow ?? price,
-      volume: meta.regularMarketVolume ?? 0,
-      avgVolume: meta.averageDailyVolume3Month ?? 0,
-      marketCap: meta.marketCap ?? null,
-      history,
+      detail: "Yahoo Finance returned a valid quote.",
+      stock: {
+        provider: "Yahoo Finance",
+        symbol,
+        name: meta.longName || meta.shortName || symbol,
+        exchange: meta.fullExchangeName || meta.exchangeName || "",
+        currency: meta.currency || "USD",
+        price,
+        previousClose: prev,
+        change: price - prev,
+        changePercent: prev ? ((price - prev) / prev) * 100 : 0,
+        open: meta.regularMarketOpen ?? price,
+        dayHigh: meta.regularMarketDayHigh ?? price,
+        dayLow: meta.regularMarketDayLow ?? price,
+        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? price,
+        fiftyTwoWeekLow: meta.fiftyTwoWeekLow ?? price,
+        volume: meta.regularMarketVolume ?? 0,
+        avgVolume: meta.averageDailyVolume3Month ?? 0,
+        marketCap: meta.marketCap ?? null,
+        history,
+      },
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return failedAttempt(
+      "Yahoo Finance",
+      `Yahoo Finance request failed${error instanceof Error ? `: ${error.message}` : "."}`,
+    );
   }
 }
 
