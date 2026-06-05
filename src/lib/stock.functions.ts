@@ -201,6 +201,7 @@ async function fetchFromStooq(symbol: string): Promise<StockData | null> {
 
     const change = close - previousClose;
     return {
+      provider: "Stooq",
       symbol,
       name: symbol,
       exchange: stooqSym.split(".")[1]?.toUpperCase() || "",
