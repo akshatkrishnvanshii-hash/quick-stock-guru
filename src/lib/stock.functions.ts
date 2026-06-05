@@ -19,6 +19,8 @@ export function normalizeTicker(input: string): string {
 }
 
 
+export type StockProvider = "Yahoo Finance" | "Stooq";
+
 export type StockData = {
   symbol: string;
   name: string;
@@ -37,6 +39,7 @@ export type StockData = {
   avgVolume: number;
   marketCap: number | null;
   history: { t: number; c: number }[];
+  provider: StockProvider;
 };
 
 function parseCsv(text: string): string[][] {
@@ -86,6 +89,7 @@ async function fetchFromYahoo(symbol: string): Promise<StockData | null> {
     const prev = meta.chartPreviousClose ?? meta.previousClose ?? price;
 
     return {
+      provider: "Yahoo Finance",
       symbol,
       name: meta.longName || meta.shortName || symbol,
       exchange: meta.fullExchangeName || meta.exchangeName || "",
@@ -197,6 +201,7 @@ async function fetchFromStooq(symbol: string): Promise<StockData | null> {
 
     const change = close - previousClose;
     return {
+      provider: "Stooq",
       symbol,
       name: symbol,
       exchange: stooqSym.split(".")[1]?.toUpperCase() || "",
@@ -235,8 +240,9 @@ export const getStock = createServerFn({ method: "GET" })
 
     const result = yahoo ?? stooq;
     if (!result) {
+      // Both providers failed — give the user a clearer, consolidated message.
       throw new Error(
-        `Couldn't find data for "${data.symbol}". Check the ticker symbol (e.g. AAPL, MSFT, TSLA) or try again in a moment.`,
+        `No data for "${data.symbol}" from either Yahoo Finance or Stooq. Double-check the ticker symbol (e.g. AAPL, MSFT, TSLA) — if it's correct, both data sources may be temporarily unavailable. Please try again in a moment.`,
       );
     }
     return result;
