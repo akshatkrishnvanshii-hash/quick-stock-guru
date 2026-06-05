@@ -10,7 +10,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { getStock, type StockData } from "@/lib/stock.functions";
+import { getStock, tickerSchema, type StockData } from "@/lib/stock.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -58,6 +58,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function Index() {
   const [symbol, setSymbol] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
   const fetchStock = useServerFn(getStock);
 
   const { mutate, data, isPending, error, reset } = useMutation<
@@ -70,10 +71,15 @@ function Index() {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const s = symbol.trim();
-    if (!s) return;
+    setValidationError(null);
+    const parsed = tickerSchema.safeParse(symbol);
+    if (!parsed.success) {
+      setValidationError(parsed.error.issues[0]?.message ?? "Invalid ticker");
+      return;
+    }
     reset();
-    mutate(s);
+    setSymbol(parsed.data);
+    mutate(parsed.data);
   };
 
   const isUp = data ? data.change >= 0 : true;
@@ -90,12 +96,22 @@ function Index() {
           </p>
         </header>
 
-        <form onSubmit={onSubmit} className="flex gap-2">
+        <form onSubmit={onSubmit} className="flex gap-2" noValidate>
           <Input
             value={symbol}
-            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            onChange={(e) => {
+              // Strip whitespace, uppercase, cap length as the user types.
+              const cleaned = e.target.value.replace(/\s+/g, "").toUpperCase().slice(0, 16);
+              setSymbol(cleaned);
+              if (validationError) setValidationError(null);
+            }}
             placeholder="Search ticker symbol…"
             className="h-12 text-base"
+            maxLength={16}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={!!validationError}
             autoFocus
           />
           <Button type="submit" size="lg" disabled={isPending || !symbol.trim()}>
@@ -108,10 +124,10 @@ function Index() {
           </Button>
         </form>
 
-        {error && (
+        {(validationError || error) && (
           <Card className="mt-6 border-destructive/50">
             <CardContent className="p-4 text-sm text-destructive">
-              {error.message || "Failed to load data."}
+              {validationError || error?.message || "Failed to load data."}
             </CardContent>
           </Card>
         )}

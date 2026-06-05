@@ -1,4 +1,23 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+
+// Tickers: 1–10 chars, letters/digits, optional .EXCHANGE suffix (e.g. BRK.B, AAPL.US, VOD.UK).
+const TICKER_REGEX = /^[A-Z0-9]{1,10}(?:\.[A-Z]{1,5})?$/;
+
+export const tickerSchema = z
+  .string({ required_error: "Ticker symbol is required" })
+  .transform((s) => s.trim().toUpperCase())
+  .refine((s) => s.length > 0, { message: "Ticker symbol is required" })
+  .refine((s) => s.length <= 16, { message: "Ticker symbol is too long" })
+  .refine((s) => TICKER_REGEX.test(s), {
+    message:
+      "Invalid ticker. Use letters/numbers only, optionally with an exchange suffix (e.g. AAPL or BRK.B).",
+  });
+
+export function normalizeTicker(input: string): string {
+  return tickerSchema.parse(input);
+}
+
 
 export type StockData = {
   symbol: string;
@@ -34,13 +53,12 @@ function toStooqSymbol(symbol: string): string {
 }
 
 export const getStock = createServerFn({ method: "GET" })
-  .inputValidator((d: { symbol: string }) => ({
-    symbol: String(d.symbol || "").trim().toUpperCase(),
-  }))
+  .inputValidator((d: { symbol: string }) =>
+    z.object({ symbol: tickerSchema }).parse(d),
+  )
   .handler(async ({ data }): Promise<StockData> => {
-    if (!data.symbol) throw new Error("Symbol is required");
-
     const stooqSym = toStooqSymbol(data.symbol);
+
     const headers = {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
@@ -82,8 +100,12 @@ export const getStock = createServerFn({ method: "GET" })
     const close = parseFloat(get("close"));
     const volume = parseInt(get("volume"), 10);
 
-    if (!Number.isFinite(close)) {
-      throw new Error(`No data for "${data.symbol}" — check the ticker symbol.`);
+    // Stooq returns "N/D" in OHLC fields when the symbol is unknown / unsupported.
+    const rawClose = get("close");
+    if (!Number.isFinite(close) || rawClose.toUpperCase() === "N/D") {
+      throw new Error(
+        `"${data.symbol}" isn't a supported ticker. Try a major US symbol (e.g. AAPL, MSFT) or include an exchange suffix (e.g. VOD.UK).`,
+      );
     }
 
     // History parse: Date,Open,High,Low,Close,Volume
