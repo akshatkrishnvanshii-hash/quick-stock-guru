@@ -19,6 +19,8 @@ export function normalizeTicker(input: string): string {
 }
 
 
+export type StockProvider = "Yahoo Finance" | "Stooq";
+
 export type StockData = {
   symbol: string;
   name: string;
@@ -37,6 +39,7 @@ export type StockData = {
   avgVolume: number;
   marketCap: number | null;
   history: { t: number; c: number }[];
+  provider: StockProvider;
 };
 
 function parseCsv(text: string): string[][] {
