@@ -109,6 +109,12 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
+const NASDAQ_HEADERS = {
+  ...BROWSER_HEADERS,
+  Origin: "https://www.nasdaq.com",
+  Referer: "https://www.nasdaq.com/",
+};
+
 async function fetchFromYahoo(symbol: string): Promise<ProviderAttempt> {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
