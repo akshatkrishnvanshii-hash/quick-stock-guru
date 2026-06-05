@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -98,6 +98,12 @@ function Index() {
           <p className="mt-2 text-sm text-muted-foreground">
             Enter a ticker symbol (e.g. AAPL, MSFT, TSLA) for live quotes.
           </p>
+          <Link
+            to="/compare"
+            className="mt-3 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Compare two stocks →
+          </Link>
         </header>
 
         <form onSubmit={onSubmit} className="flex gap-2" noValidate>
