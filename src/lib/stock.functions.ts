@@ -102,6 +102,7 @@ export const getStock = createServerFn({ method: "GET" })
 
     // Stooq returns "N/D" in OHLC fields when the symbol is unknown / unsupported.
     const rawClose = get("close");
+    console.log("[getStock]", data.symbol, "quote:", quoteText.slice(0, 200));
     if (!Number.isFinite(close) || rawClose.toUpperCase() === "N/D") {
       throw new Error(
         `"${data.symbol}" isn't a supported ticker. Try a major US symbol (e.g. AAPL, MSFT) or include an exchange suffix (e.g. VOD.UK).`,
