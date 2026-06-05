@@ -58,6 +58,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function Index() {
   const [symbol, setSymbol] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
   const fetchStock = useServerFn(getStock);
 
   const { mutate, data, isPending, error, reset } = useMutation<
@@ -70,10 +71,15 @@ function Index() {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const s = symbol.trim();
-    if (!s) return;
+    setValidationError(null);
+    const parsed = tickerSchema.safeParse(symbol);
+    if (!parsed.success) {
+      setValidationError(parsed.error.issues[0]?.message ?? "Invalid ticker");
+      return;
+    }
     reset();
-    mutate(s);
+    setSymbol(parsed.data);
+    mutate(parsed.data);
   };
 
   const isUp = data ? data.change >= 0 : true;
