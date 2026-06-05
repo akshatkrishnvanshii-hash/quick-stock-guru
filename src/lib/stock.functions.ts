@@ -19,7 +19,7 @@ export function normalizeTicker(input: string): string {
 }
 
 
-export type StockProvider = "Yahoo Finance" | "Stooq";
+export type StockProvider = "Yahoo Finance" | "Stooq" | "Nasdaq";
 
 export type StockData = {
   symbol: string;
@@ -42,6 +42,53 @@ export type StockData = {
   provider: StockProvider;
 };
 
+export type StockLookupResult = {
+  stock: StockData | null;
+  error: string | null;
+  details: string[];
+};
+
+type ProviderAttempt = {
+  provider: StockProvider;
+  stock: StockData | null;
+  detail: string;
+};
+
+function failedAttempt(
+  provider: StockProvider,
+  detail: string,
+): ProviderAttempt {
+  return { provider, stock: null, detail };
+}
+
+function parseNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/[$,%+\s]/g, "").replace(/,/g, "");
+  if (!cleaned || cleaned.toUpperCase() === "N/A") return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstNumber(...values: Array<number | null | undefined>): number | null {
+  return values.find((value) => typeof value === "number" && Number.isFinite(value)) ?? null;
+}
+
+function numbersFrom(value: unknown): number[] {
+  if (typeof value !== "string") return [];
+  return (value.match(/[+-]?\$?\d[\d,]*(?:\.\d+)?%?/g) ?? [])
+    .map(parseNumber)
+    .filter((value): value is number => value !== null);
+}
+
+function parseNasdaqDate(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const [month, day, year] = value.split("/").map((part) => Number(part));
+  if (!month || !day || !year) return null;
+  const timestamp = Date.UTC(year, month - 1, day);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 function parseCsv(text: string): string[][] {
   return text
     .trim()
@@ -62,21 +109,27 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-async function fetchFromYahoo(symbol: string): Promise<StockData | null> {
+const NASDAQ_HEADERS = {
+  ...BROWSER_HEADERS,
+  Origin: "https://www.nasdaq.com",
+  Referer: "https://www.nasdaq.com/",
+};
+
+async function fetchFromYahoo(symbol: string): Promise<ProviderAttempt> {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       symbol,
     )}?range=1y&interval=1d`;
     const res = await fetch(url, { headers: BROWSER_HEADERS });
-    if (!res.ok) return null;
+    if (!res.ok) return failedAttempt("Yahoo Finance", `Yahoo Finance returned ${res.status}.`);
     const json: any = await res.json();
-    if (json?.chart?.error) return null;
+    if (json?.chart?.error) return failedAttempt("Yahoo Finance", json.chart.error.description || "Yahoo Finance rejected the ticker.");
     const result = json?.chart?.result?.[0];
-    if (!result) return null;
+    if (!result) return failedAttempt("Yahoo Finance", "Yahoo Finance returned no chart result.");
     const meta = result.meta;
     const timestamps: number[] = result.timestamp || [];
     const closes: (number | null)[] = result.indicators?.quote?.[0]?.close || [];
-    if (!meta?.regularMarketPrice) return null;
+    if (!meta?.regularMarketPrice) return failedAttempt("Yahoo Finance", "Yahoo Finance returned no current price.");
 
     const fullHistory = timestamps
       .map((t, i) => ({ t: t * 1000, c: closes[i] as number }))
@@ -90,30 +143,37 @@ async function fetchFromYahoo(symbol: string): Promise<StockData | null> {
 
     return {
       provider: "Yahoo Finance",
-      symbol,
-      name: meta.longName || meta.shortName || symbol,
-      exchange: meta.fullExchangeName || meta.exchangeName || "",
-      currency: meta.currency || "USD",
-      price,
-      previousClose: prev,
-      change: price - prev,
-      changePercent: prev ? ((price - prev) / prev) * 100 : 0,
-      open: meta.regularMarketOpen ?? price,
-      dayHigh: meta.regularMarketDayHigh ?? price,
-      dayLow: meta.regularMarketDayLow ?? price,
-      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? price,
-      fiftyTwoWeekLow: meta.fiftyTwoWeekLow ?? price,
-      volume: meta.regularMarketVolume ?? 0,
-      avgVolume: meta.averageDailyVolume3Month ?? 0,
-      marketCap: meta.marketCap ?? null,
-      history,
+      detail: "Yahoo Finance returned a valid quote.",
+      stock: {
+        provider: "Yahoo Finance",
+        symbol,
+        name: meta.longName || meta.shortName || symbol,
+        exchange: meta.fullExchangeName || meta.exchangeName || "",
+        currency: meta.currency || "USD",
+        price,
+        previousClose: prev,
+        change: price - prev,
+        changePercent: prev ? ((price - prev) / prev) * 100 : 0,
+        open: meta.regularMarketOpen ?? price,
+        dayHigh: meta.regularMarketDayHigh ?? price,
+        dayLow: meta.regularMarketDayLow ?? price,
+        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? price,
+        fiftyTwoWeekLow: meta.fiftyTwoWeekLow ?? price,
+        volume: meta.regularMarketVolume ?? 0,
+        avgVolume: meta.averageDailyVolume3Month ?? 0,
+        marketCap: meta.marketCap ?? null,
+        history,
+      },
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return failedAttempt(
+      "Yahoo Finance",
+      `Yahoo Finance request failed${error instanceof Error ? `: ${error.message}` : "."}`,
+    );
   }
 }
 
-async function fetchFromStooq(symbol: string): Promise<StockData | null> {
+async function fetchFromStooq(symbol: string): Promise<ProviderAttempt> {
   try {
     const stooqSym = toStooqSymbol(symbol);
     const quoteUrl = `https://stooq.com/q/l/?s=${encodeURIComponent(
@@ -127,11 +187,14 @@ async function fetchFromStooq(symbol: string): Promise<StockData | null> {
       fetch(quoteUrl, { headers: BROWSER_HEADERS }),
       fetch(histUrl, { headers: BROWSER_HEADERS }),
     ]);
-    if (!quoteRes.ok) return null;
+    if (!quoteRes.ok) return failedAttempt("Stooq", `Stooq returned ${quoteRes.status}.`);
 
     const quoteText = await quoteRes.text();
+    if (quoteText.trimStart().startsWith("<!DOCTYPE") || quoteText.includes("requires JavaScript")) {
+      return failedAttempt("Stooq", "Stooq required browser verification.");
+    }
     const quoteRows = parseCsv(quoteText);
-    if (quoteRows.length < 2) return null;
+    if (quoteRows.length < 2) return failedAttempt("Stooq", "Stooq returned no quote rows.");
     const header = quoteRows[0].map((h) => h.toLowerCase());
     const row = quoteRows[1];
     const get = (key: string) => {
@@ -146,7 +209,7 @@ async function fetchFromStooq(symbol: string): Promise<StockData | null> {
     const volume = parseInt(get("volume"), 10);
 
     if (!Number.isFinite(close) || get("close").toUpperCase() === "N/D") {
-      return null;
+      return failedAttempt("Stooq", "Stooq did not return a valid close price.");
     }
 
     let history: { t: number; c: number; v: number }[] = [];
@@ -202,26 +265,116 @@ async function fetchFromStooq(symbol: string): Promise<StockData | null> {
     const change = close - previousClose;
     return {
       provider: "Stooq",
-      symbol,
-      name: symbol,
-      exchange: stooqSym.split(".")[1]?.toUpperCase() || "",
-      currency: "USD",
-      price: close,
-      previousClose,
-      change,
-      changePercent: previousClose ? (change / previousClose) * 100 : 0,
-      open: Number.isFinite(open) ? open : close,
-      dayHigh: Number.isFinite(high) ? high : close,
-      dayLow: Number.isFinite(low) ? low : close,
-      fiftyTwoWeekHigh,
-      fiftyTwoWeekLow,
-      volume: Number.isFinite(volume) ? volume : 0,
-      avgVolume,
-      marketCap: null,
-      history: chartHistory,
+      detail: "Stooq returned a valid quote.",
+      stock: {
+        provider: "Stooq",
+        symbol,
+        name: symbol,
+        exchange: stooqSym.split(".")[1]?.toUpperCase() || "",
+        currency: "USD",
+        price: close,
+        previousClose,
+        change,
+        changePercent: previousClose ? (change / previousClose) * 100 : 0,
+        open: Number.isFinite(open) ? open : close,
+        dayHigh: Number.isFinite(high) ? high : close,
+        dayLow: Number.isFinite(low) ? low : close,
+        fiftyTwoWeekHigh,
+        fiftyTwoWeekLow,
+        volume: Number.isFinite(volume) ? volume : 0,
+        avgVolume,
+        marketCap: null,
+        history: chartHistory,
+      },
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return failedAttempt(
+      "Stooq",
+      `Stooq request failed${error instanceof Error ? `: ${error.message}` : "."}`,
+    );
+  }
+}
+
+async function fetchFromNasdaq(symbol: string): Promise<ProviderAttempt> {
+  try {
+    const end = new Date();
+    const start = new Date(end.getTime() - 183 * 24 * 60 * 60 * 1000);
+    const fmt = (date: Date) => date.toISOString().slice(0, 10);
+    const base = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}`;
+    const [infoRes, summaryRes, historyRes] = await Promise.all([
+      fetch(`${base}/info?assetclass=stocks`, { headers: NASDAQ_HEADERS }),
+      fetch(`${base}/summary?assetclass=stocks`, { headers: NASDAQ_HEADERS }),
+      fetch(`${base}/historical?assetclass=stocks&fromdate=${fmt(start)}&todate=${fmt(end)}&limit=9999`, {
+        headers: NASDAQ_HEADERS,
+      }),
+    ]);
+
+    if (!infoRes.ok) return failedAttempt("Nasdaq", `Nasdaq returned ${infoRes.status}.`);
+
+    const [infoJson, summaryJson, historyJson]: any[] = await Promise.all([
+      infoRes.json(),
+      summaryRes.ok ? summaryRes.json() : Promise.resolve(null),
+      historyRes.ok ? historyRes.json() : Promise.resolve(null),
+    ]);
+
+    const info = infoJson?.data;
+    const primary = info?.primaryData ?? {};
+    const summary = summaryJson?.data?.summaryData ?? {};
+    const rows = historyJson?.data?.tradesTable?.rows ?? [];
+
+    const history = rows
+      .map((row: any) => ({
+        t: parseNasdaqDate(row?.date),
+        c: parseNumber(row?.close),
+      }))
+      .filter((point: { t: number | null; c: number | null }): point is { t: number; c: number } =>
+        point.t !== null && point.c !== null,
+      )
+      .sort((a: { t: number }, b: { t: number }) => a.t - b.t);
+
+    const latestRow = rows[0] ?? {};
+    const price = firstNumber(parseNumber(primary.lastSalePrice), parseNumber(latestRow.close));
+    if (price === null) return failedAttempt("Nasdaq", "Nasdaq returned no current price.");
+
+    const previousClose = firstNumber(
+      parseNumber(primary.previousClose),
+      parseNumber(summary.PreviousClose?.value),
+      history.length > 1 ? history[history.length - 2].c : null,
+      price,
+    ) ?? price;
+    const change = firstNumber(parseNumber(primary.netChange), price - previousClose) ?? 0;
+    const changePercent = firstNumber(parseNumber(primary.percentageChange), previousClose ? (change / previousClose) * 100 : 0) ?? 0;
+    const weekRange = numbersFrom(summary.FiftTwoWeekHighLow?.value || info?.keyStats?.fiftyTwoWeekHighLow?.value);
+
+    return {
+      provider: "Nasdaq",
+      detail: "Nasdaq returned a valid quote.",
+      stock: {
+        provider: "Nasdaq",
+        symbol: info?.symbol || symbol,
+        name: info?.companyName || symbol,
+        exchange: info?.exchange || summary.Exchange?.value || "",
+        currency: "USD",
+        price,
+        previousClose,
+        change,
+        changePercent,
+        open: firstNumber(parseNumber(latestRow.open), price) ?? price,
+        dayHigh: firstNumber(parseNumber(latestRow.high), price) ?? price,
+        dayLow: firstNumber(parseNumber(latestRow.low), price) ?? price,
+        fiftyTwoWeekHigh: firstNumber(weekRange[0], price) ?? price,
+        fiftyTwoWeekLow: firstNumber(weekRange[1], price) ?? price,
+        volume: firstNumber(parseNumber(primary.volume), parseNumber(summary.ShareVolume?.value), parseNumber(latestRow.volume), 0) ?? 0,
+        avgVolume: firstNumber(parseNumber(summary.AverageVolume?.value), 0) ?? 0,
+        marketCap: parseNumber(summary.MarketCap?.value),
+        history,
+      },
+    };
+  } catch (error) {
+    return failedAttempt(
+      "Nasdaq",
+      `Nasdaq request failed${error instanceof Error ? `: ${error.message}` : "."}`,
+    );
   }
 }
 
@@ -229,22 +382,24 @@ export const getStock = createServerFn({ method: "GET" })
   .inputValidator((d: { symbol: string }) =>
     z.object({ symbol: tickerSchema }).parse(d),
   )
-  .handler(async ({ data }): Promise<StockData> => {
+  .handler(async ({ data }): Promise<StockLookupResult> => {
     // Try Yahoo first (richer metadata), then Stooq as fallback.
     // Run both in parallel and prefer Yahoo if it succeeds — minimizes latency
     // when one provider is throttling.
-    const [yahoo, stooq] = await Promise.all([
+    const [yahoo, nasdaq, stooq] = await Promise.all([
       fetchFromYahoo(data.symbol),
+      fetchFromNasdaq(data.symbol),
       fetchFromStooq(data.symbol),
     ]);
 
-    const result = yahoo ?? stooq;
-    if (!result) {
-      // Both providers failed — give the user a clearer, consolidated message.
-      throw new Error(
-        `No data for "${data.symbol}" from either Yahoo Finance or Stooq. Double-check the ticker symbol (e.g. AAPL, MSFT, TSLA) — if it's correct, both data sources may be temporarily unavailable. Please try again in a moment.`,
-      );
-    }
-    return result;
+    const attempts = [yahoo, nasdaq, stooq];
+    const result = attempts.find((attempt) => attempt.stock)?.stock ?? null;
+    return {
+      stock: result,
+      error: result
+        ? null
+        : `Couldn't find data for "${data.symbol}". Check the ticker symbol (e.g. AAPL, MSFT, TSLA) or try again in a moment.`,
+      details: attempts.map((attempt) => attempt.detail),
+    };
   });
 

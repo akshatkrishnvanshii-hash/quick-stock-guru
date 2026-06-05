@@ -10,7 +10,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { getStock, tickerSchema, type StockData } from "@/lib/stock.functions";
+import { getStock, tickerSchema, type StockData, type StockLookupResult } from "@/lib/stock.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,8 +61,8 @@ function Index() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const fetchStock = useServerFn(getStock);
 
-  const { mutate, data, isPending, error, reset } = useMutation<
-    StockData,
+  const { mutate, data: lookup, isPending, error, reset } = useMutation<
+    StockLookupResult,
     Error,
     string
   >({
@@ -82,6 +82,10 @@ function Index() {
     mutate(parsed.data);
   };
 
+  const data: StockData | null = lookup?.stock ?? null;
+  const providerError = lookup?.error
+    ? `${lookup.error} ${lookup.details.length ? `Details: ${lookup.details.join(" ")}` : ""}`
+    : null;
   const isUp = data ? data.change >= 0 : true;
 
   return (
@@ -124,10 +128,10 @@ function Index() {
           </Button>
         </form>
 
-        {(validationError || error) && (
+        {(validationError || providerError || error) && (
           <Card className="mt-6 border-destructive/50">
             <CardContent className="p-4 text-sm text-destructive">
-              {validationError || error?.message || "Failed to load data."}
+              {validationError || providerError || error?.message || "Failed to load data."}
             </CardContent>
           </Card>
         )}
