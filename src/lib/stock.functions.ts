@@ -89,6 +89,7 @@ async function fetchFromYahoo(symbol: string): Promise<StockData | null> {
     const prev = meta.chartPreviousClose ?? meta.previousClose ?? price;
 
     return {
+      provider: "Yahoo Finance",
       symbol,
       name: meta.longName || meta.shortName || symbol,
       exchange: meta.fullExchangeName || meta.exchangeName || "",
