@@ -322,11 +322,10 @@ function Compare() {
                         labelFormatter={(t) =>
                           new Date(t as number).toLocaleDateString()
                         }
-                        formatter={(v: number | null) =>
-                          v === null || v === undefined
-                            ? ["—", ""]
-                            : [`${v.toFixed(2)}%`, ""]
-                        }
+                        formatter={(v) => {
+                          const n = typeof v === "number" ? v : Number(v);
+                          return [Number.isFinite(n) ? `${n.toFixed(2)}%` : "—", ""];
+                        }}
                       />
                       <Legend />
                       <Line
