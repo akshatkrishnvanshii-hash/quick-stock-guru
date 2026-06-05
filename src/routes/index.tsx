@@ -256,7 +256,7 @@ function Index() {
             </div>
 
             <p className="text-center text-xs text-muted-foreground">
-              Data from Yahoo Finance. May be delayed up to 15 minutes.
+              Data from {data.provider}. May be delayed up to 15 minutes.
             </p>
           </section>
         )}
