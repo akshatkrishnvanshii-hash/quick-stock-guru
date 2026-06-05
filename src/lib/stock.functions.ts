@@ -167,7 +167,7 @@ async function fetchFromYahoo(symbol: string): Promise<ProviderAttempt> {
   }
 }
 
-async function fetchFromStooq(symbol: string): Promise<StockData | null> {
+async function fetchFromStooq(symbol: string): Promise<ProviderAttempt> {
   try {
     const stooqSym = toStooqSymbol(symbol);
     const quoteUrl = `https://stooq.com/q/l/?s=${encodeURIComponent(
@@ -181,11 +181,14 @@ async function fetchFromStooq(symbol: string): Promise<StockData | null> {
       fetch(quoteUrl, { headers: BROWSER_HEADERS }),
       fetch(histUrl, { headers: BROWSER_HEADERS }),
     ]);
-    if (!quoteRes.ok) return null;
+    if (!quoteRes.ok) return failedAttempt("Stooq", `Stooq returned ${quoteRes.status}.`);
 
     const quoteText = await quoteRes.text();
+    if (quoteText.trimStart().startsWith("<!DOCTYPE") || quoteText.includes("requires JavaScript")) {
+      return failedAttempt("Stooq", "Stooq required browser verification.");
+    }
     const quoteRows = parseCsv(quoteText);
-    if (quoteRows.length < 2) return null;
+    if (quoteRows.length < 2) return failedAttempt("Stooq", "Stooq returned no quote rows.");
     const header = quoteRows[0].map((h) => h.toLowerCase());
     const row = quoteRows[1];
     const get = (key: string) => {
@@ -200,7 +203,7 @@ async function fetchFromStooq(symbol: string): Promise<StockData | null> {
     const volume = parseInt(get("volume"), 10);
 
     if (!Number.isFinite(close) || get("close").toUpperCase() === "N/D") {
-      return null;
+      return failedAttempt("Stooq", "Stooq did not return a valid close price.");
     }
 
     let history: { t: number; c: number; v: number }[] = [];
@@ -256,26 +259,33 @@ async function fetchFromStooq(symbol: string): Promise<StockData | null> {
     const change = close - previousClose;
     return {
       provider: "Stooq",
-      symbol,
-      name: symbol,
-      exchange: stooqSym.split(".")[1]?.toUpperCase() || "",
-      currency: "USD",
-      price: close,
-      previousClose,
-      change,
-      changePercent: previousClose ? (change / previousClose) * 100 : 0,
-      open: Number.isFinite(open) ? open : close,
-      dayHigh: Number.isFinite(high) ? high : close,
-      dayLow: Number.isFinite(low) ? low : close,
-      fiftyTwoWeekHigh,
-      fiftyTwoWeekLow,
-      volume: Number.isFinite(volume) ? volume : 0,
-      avgVolume,
-      marketCap: null,
-      history: chartHistory,
+      detail: "Stooq returned a valid quote.",
+      stock: {
+        provider: "Stooq",
+        symbol,
+        name: symbol,
+        exchange: stooqSym.split(".")[1]?.toUpperCase() || "",
+        currency: "USD",
+        price: close,
+        previousClose,
+        change,
+        changePercent: previousClose ? (change / previousClose) * 100 : 0,
+        open: Number.isFinite(open) ? open : close,
+        dayHigh: Number.isFinite(high) ? high : close,
+        dayLow: Number.isFinite(low) ? low : close,
+        fiftyTwoWeekHigh,
+        fiftyTwoWeekLow,
+        volume: Number.isFinite(volume) ? volume : 0,
+        avgVolume,
+        marketCap: null,
+        history: chartHistory,
+      },
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return failedAttempt(
+      "Stooq",
+      `Stooq request failed${error instanceof Error ? `: ${error.message}` : "."}`,
+    );
   }
 }
 
