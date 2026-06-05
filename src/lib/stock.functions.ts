@@ -100,8 +100,12 @@ export const getStock = createServerFn({ method: "GET" })
     const close = parseFloat(get("close"));
     const volume = parseInt(get("volume"), 10);
 
-    if (!Number.isFinite(close)) {
-      throw new Error(`No data for "${data.symbol}" — check the ticker symbol.`);
+    // Stooq returns "N/D" in OHLC fields when the symbol is unknown / unsupported.
+    const rawClose = get("close");
+    if (!Number.isFinite(close) || rawClose.toUpperCase() === "N/D") {
+      throw new Error(
+        `"${data.symbol}" isn't a supported ticker. Try a major US symbol (e.g. AAPL, MSFT) or include an exchange suffix (e.g. VOD.UK).`,
+      );
     }
 
     // History parse: Date,Open,High,Low,Close,Volume
