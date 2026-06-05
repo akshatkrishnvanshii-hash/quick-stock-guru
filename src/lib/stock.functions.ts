@@ -240,8 +240,9 @@ export const getStock = createServerFn({ method: "GET" })
 
     const result = yahoo ?? stooq;
     if (!result) {
+      // Both providers failed — give the user a clearer, consolidated message.
       throw new Error(
-        `Couldn't find data for "${data.symbol}". Check the ticker symbol (e.g. AAPL, MSFT, TSLA) or try again in a moment.`,
+        `No data for "${data.symbol}" from either Yahoo Finance or Stooq. Double-check the ticker symbol (e.g. AAPL, MSFT, TSLA) — if it's correct, both data sources may be temporarily unavailable. Please try again in a moment.`,
       );
     }
     return result;
