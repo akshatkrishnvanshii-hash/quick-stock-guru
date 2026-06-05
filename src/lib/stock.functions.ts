@@ -19,7 +19,7 @@ export function normalizeTicker(input: string): string {
 }
 
 
-export type StockProvider = "Yahoo Finance" | "Stooq";
+export type StockProvider = "Yahoo Finance" | "Stooq" | "Nasdaq";
 
 export type StockData = {
   symbol: string;
@@ -41,6 +41,53 @@ export type StockData = {
   history: { t: number; c: number }[];
   provider: StockProvider;
 };
+
+export type StockLookupResult = {
+  stock: StockData | null;
+  error: string | null;
+  details: string[];
+};
+
+type ProviderAttempt = {
+  provider: StockProvider;
+  stock: StockData | null;
+  detail: string;
+};
+
+function failedAttempt(
+  provider: StockProvider,
+  detail: string,
+): ProviderAttempt {
+  return { provider, stock: null, detail };
+}
+
+function parseNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/[$,%+\s]/g, "").replace(/,/g, "");
+  if (!cleaned || cleaned.toUpperCase() === "N/A") return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstNumber(...values: Array<number | null | undefined>): number | null {
+  return values.find((value) => typeof value === "number" && Number.isFinite(value)) ?? null;
+}
+
+function numbersFrom(value: unknown): number[] {
+  if (typeof value !== "string") return [];
+  return (value.match(/[+-]?\$?\d[\d,]*(?:\.\d+)?%?/g) ?? [])
+    .map(parseNumber)
+    .filter((value): value is number => value !== null);
+}
+
+function parseNasdaqDate(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const [month, day, year] = value.split("/").map((part) => Number(part));
+  if (!month || !day || !year) return null;
+  const timestamp = Date.UTC(year, month - 1, day);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
 
 function parseCsv(text: string): string[][] {
   return text
