@@ -10,7 +10,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { getStock, type StockData } from "@/lib/stock.functions";
+import { getStock, tickerSchema, type StockData } from "@/lib/stock.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
