@@ -1,29 +1,250 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
+import { getStock, type StockData } from "@/lib/stock.functions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { ArrowDown, ArrowUp, Search, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Your App" },
-      { name: "description", content: "Replace this with a one-sentence description of your app." },
-      { property: "og:title", content: "Your App" },
-      { property: "og:description", content: "Replace this with a one-sentence description of your app." },
+      { title: "Stock Lookup — Real-time Quotes & Financials" },
+      {
+        name: "description",
+        content:
+          "Enter a stock ticker to get live price, daily range, 52-week range, volume, market cap, and a 6-month price chart.",
+      },
     ],
   }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function formatNumber(n: number | null, opts?: Intl.NumberFormatOptions) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return new Intl.NumberFormat("en-US", opts).format(n);
+}
+
+function formatCompact(n: number | null) {
+  if (n === null || n === undefined || !n) return "—";
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="flex flex-col gap-1 rounded-lg border bg-card p-4">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-base font-semibold text-foreground tabular-nums">
+        {value}
+      </span>
     </div>
+  );
+}
+
+function Index() {
+  const [symbol, setSymbol] = useState("");
+  const fetchStock = useServerFn(getStock);
+
+  const { mutate, data, isPending, error, reset } = useMutation<
+    StockData,
+    Error,
+    string
+  >({
+    mutationFn: (sym: string) => fetchStock({ data: { symbol: sym } }),
+  });
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const s = symbol.trim();
+    if (!s) return;
+    reset();
+    mutate(s);
+  };
+
+  const isUp = data ? data.change >= 0 : true;
+
+  return (
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto max-w-4xl px-4 py-12 sm:py-16">
+        <header className="mb-8 text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            Stock Lookup
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Enter a ticker symbol (e.g. AAPL, MSFT, TSLA) for live quotes.
+          </p>
+        </header>
+
+        <form onSubmit={onSubmit} className="flex gap-2">
+          <Input
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            placeholder="Search ticker symbol…"
+            className="h-12 text-base"
+            autoFocus
+          />
+          <Button type="submit" size="lg" disabled={isPending || !symbol.trim()}>
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            <span className="ml-2 hidden sm:inline">Search</span>
+          </Button>
+        </form>
+
+        {error && (
+          <Card className="mt-6 border-destructive/50">
+            <CardContent className="p-4 text-sm text-destructive">
+              {error.message || "Failed to load data."}
+            </CardContent>
+          </Card>
+        )}
+
+        {data && (
+          <section className="mt-8 space-y-6">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <div className="text-sm text-muted-foreground">
+                  {data.symbol} · {data.exchange}
+                </div>
+                <h2 className="text-2xl font-bold text-foreground">
+                  {data.name}
+                </h2>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold tabular-nums text-foreground">
+                  {formatNumber(data.price, {
+                    style: "currency",
+                    currency: data.currency,
+                  })}
+                </div>
+                <div
+                  className={`mt-1 inline-flex items-center gap-1 text-sm font-medium tabular-nums ${
+                    isUp ? "text-emerald-600" : "text-destructive"
+                  }`}
+                >
+                  {isUp ? (
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  )}
+                  {formatNumber(data.change, {
+                    signDisplay: "always",
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  ({data.changePercent.toFixed(2)}%)
+                </div>
+              </div>
+            </div>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data.history}>
+                      <defs>
+                        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+                          <stop
+                            offset="0%"
+                            stopColor={isUp ? "#10b981" : "#ef4444"}
+                            stopOpacity={0.35}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor={isUp ? "#10b981" : "#ef4444"}
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <XAxis
+                        dataKey="t"
+                        tickFormatter={(t) =>
+                          new Date(t).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          })
+                        }
+                        tick={{ fontSize: 11 }}
+                        minTickGap={40}
+                      />
+                      <YAxis
+                        domain={["auto", "auto"]}
+                        tick={{ fontSize: 11 }}
+                        width={50}
+                        tickFormatter={(v) => v.toFixed(0)}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--popover)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                        labelFormatter={(t) =>
+                          new Date(t as number).toLocaleDateString()
+                        }
+                        formatter={(v: number) => [
+                          formatNumber(v, {
+                            style: "currency",
+                            currency: data.currency,
+                          }),
+                          "Close",
+                        ]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="c"
+                        stroke={isUp ? "#10b981" : "#ef4444"}
+                        strokeWidth={2}
+                        fill="url(#g)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat label="Open" value={formatNumber(data.open, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
+              <Stat label="Previous Close" value={formatNumber(data.previousClose, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
+              <Stat
+                label="Day Range"
+                value={`${formatNumber(data.dayLow, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ${formatNumber(data.dayHigh, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              />
+              <Stat
+                label="52-Week Range"
+                value={`${formatNumber(data.fiftyTwoWeekLow, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ${formatNumber(data.fiftyTwoWeekHigh, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              />
+              <Stat label="Volume" value={formatCompact(data.volume)} />
+              <Stat label="Avg Volume" value={formatCompact(data.avgVolume)} />
+              <Stat label="Market Cap" value={formatCompact(data.marketCap)} />
+              <Stat label="Currency" value={data.currency} />
+              <Stat label="Exchange" value={data.exchange || "—"} />
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground">
+              Data from Yahoo Finance. May be delayed up to 15 minutes.
+            </p>
+          </section>
+        )}
+      </div>
+    </main>
   );
 }
