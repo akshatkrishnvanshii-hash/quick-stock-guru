@@ -53,13 +53,12 @@ function toStooqSymbol(symbol: string): string {
 }
 
 export const getStock = createServerFn({ method: "GET" })
-  .inputValidator((d: { symbol: string }) => ({
-    symbol: String(d.symbol || "").trim().toUpperCase(),
-  }))
+  .inputValidator((d: { symbol: string }) =>
+    z.object({ symbol: tickerSchema }).parse(d),
+  )
   .handler(async ({ data }): Promise<StockData> => {
-    if (!data.symbol) throw new Error("Symbol is required");
-
     const stooqSym = toStooqSymbol(data.symbol);
+
     const headers = {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
