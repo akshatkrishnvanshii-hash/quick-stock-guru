@@ -1,4 +1,23 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+
+// Tickers: 1–10 chars, letters/digits, optional .EXCHANGE suffix (e.g. BRK.B, AAPL.US, VOD.UK).
+const TICKER_REGEX = /^[A-Z0-9]{1,10}(?:\.[A-Z]{1,5})?$/;
+
+export const tickerSchema = z
+  .string({ required_error: "Ticker symbol is required" })
+  .transform((s) => s.trim().toUpperCase())
+  .refine((s) => s.length > 0, { message: "Ticker symbol is required" })
+  .refine((s) => s.length <= 16, { message: "Ticker symbol is too long" })
+  .refine((s) => TICKER_REGEX.test(s), {
+    message:
+      "Invalid ticker. Use letters/numbers only, optionally with an exchange suffix (e.g. AAPL or BRK.B).",
+  });
+
+export function normalizeTicker(input: string): string {
+  return tickerSchema.parse(input);
+}
+
 
 export type StockData = {
   symbol: string;
