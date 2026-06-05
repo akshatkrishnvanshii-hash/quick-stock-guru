@@ -136,8 +136,11 @@ function Index() {
           <section className="mt-8 space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
-                <div className="text-sm text-muted-foreground">
-                  {data.symbol} · {data.exchange}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>{data.symbol} · {data.exchange}</span>
+                  <span className="rounded-full border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                    {data.provider}
+                  </span>
                 </div>
                 <h2 className="text-2xl font-bold text-foreground">
                   {data.name}
