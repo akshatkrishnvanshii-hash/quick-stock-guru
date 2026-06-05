@@ -96,12 +96,22 @@ function Index() {
           </p>
         </header>
 
-        <form onSubmit={onSubmit} className="flex gap-2">
+        <form onSubmit={onSubmit} className="flex gap-2" noValidate>
           <Input
             value={symbol}
-            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            onChange={(e) => {
+              // Strip whitespace, uppercase, cap length as the user types.
+              const cleaned = e.target.value.replace(/\s+/g, "").toUpperCase().slice(0, 16);
+              setSymbol(cleaned);
+              if (validationError) setValidationError(null);
+            }}
             placeholder="Search ticker symbol…"
             className="h-12 text-base"
+            maxLength={16}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={!!validationError}
             autoFocus
           />
           <Button type="submit" size="lg" disabled={isPending || !symbol.trim()}>
@@ -114,10 +124,10 @@ function Index() {
           </Button>
         </form>
 
-        {error && (
+        {(validationError || error) && (
           <Card className="mt-6 border-destructive/50">
             <CardContent className="p-4 text-sm text-destructive">
-              {error.message || "Failed to load data."}
+              {validationError || error?.message || "Failed to load data."}
             </CardContent>
           </Card>
         )}
