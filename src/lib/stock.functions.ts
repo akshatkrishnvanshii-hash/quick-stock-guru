@@ -383,22 +383,27 @@ export const getStock = createServerFn({ method: "GET" })
     z.object({ symbol: tickerSchema }).parse(d),
   )
   .handler(async ({ data }): Promise<StockLookupResult> => {
-    // Try Yahoo first (richer metadata), then Stooq as fallback.
-    // Run both in parallel and prefer Yahoo if it succeeds — minimizes latency
-    // when one provider is throttling.
-    const [yahoo, nasdaq, stooq] = await Promise.all([
-      fetchFromYahoo(data.symbol),
-      fetchFromNasdaq(data.symbol),
-      fetchFromStooq(data.symbol),
+    const hasSuffix = data.symbol.includes(".");
+    // For bare symbols, also try Indian exchange suffixes via Yahoo
+    // (NSE: .NS, BSE: .BO). Yahoo is the canonical source for Indian listings.
+    const yahooSymbols = hasSuffix
+      ? [data.symbol]
+      : [data.symbol, `${data.symbol}.NS`, `${data.symbol}.BO`];
+
+    const [yahooAttempts, nasdaq, stooq] = await Promise.all([
+      Promise.all(yahooSymbols.map((s) => fetchFromYahoo(s))),
+      // Nasdaq + Stooq are US-only; only query for symbols without a non-US suffix.
+      hasSuffix ? Promise.resolve(failedAttempt("Nasdaq", "Skipped Nasdaq for non-US symbol.")) : fetchFromNasdaq(data.symbol),
+      hasSuffix ? Promise.resolve(failedAttempt("Stooq", "Skipped Stooq for non-US symbol.")) : fetchFromStooq(data.symbol),
     ]);
 
-    const attempts = [yahoo, nasdaq, stooq];
+    const attempts = [...yahooAttempts, nasdaq, stooq];
     const result = attempts.find((attempt) => attempt.stock)?.stock ?? null;
     return {
       stock: result,
       error: result
         ? null
-        : `Couldn't find data for "${data.symbol}". Check the ticker symbol (e.g. AAPL, MSFT, TSLA) or try again in a moment.`,
+        : `Couldn't find data for "${data.symbol}". Check the ticker symbol (e.g. AAPL, TSLA, RELIANCE.NS, TCS.BO) or try again in a moment.`,
       details: attempts.map((attempt) => attempt.detail),
     };
   });
