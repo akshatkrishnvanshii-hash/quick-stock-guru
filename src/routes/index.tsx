@@ -96,7 +96,7 @@ function Index() {
             Stock Lookup
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Enter a ticker symbol (e.g. AAPL, MSFT, TSLA) for live quotes.
+            Enter a ticker (e.g. AAPL, TSLA, RELIANCE.NS, TCS.BO) for live quotes.
           </p>
           <Link
             to="/compare"
