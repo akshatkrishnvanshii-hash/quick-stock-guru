@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Stock Intelligence Hub" },
+      { name: "description", content: "Stock analysis platform for Indian and US markets with company insights, valuation metrics, performance tracking, and stock comparison." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Stock Intelligence Hub" },
+      { property: "og:description", content: "Stock analysis platform for Indian and US markets with company insights, valuation metrics, performance tracking, and stock comparison." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Stock Intelligence Hub" },
+      { name: "twitter:description", content: "Stock analysis platform for Indian and US markets with company insights, valuation metrics, performance tracking, and stock comparison." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/bf910592-97f9-448e-82f1-b5cb978591e1" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/bf910592-97f9-448e-82f1-b5cb978591e1" },
     ],
     links: [
       {
